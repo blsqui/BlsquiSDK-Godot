@@ -46,7 +46,7 @@ static func request_transaction(options: Dictionary = {}) -> Dictionary:
 	var current_nonce: String = generate_client_nonce()
 	var current_time: int = int(Time.get_unix_time_from_system())
 
-	# 1. Build Query Parameters
+	# Build Query Parameters
 	var query_parts: PackedStringArray = PackedStringArray([
 		"flix=" + flix_id.uri_encode(),
 		"issued_time=" + str(current_time),
@@ -65,7 +65,7 @@ static func request_transaction(options: Dictionary = {}) -> Dictionary:
 		print("[BlsquiSDK] Wallet Gateway URL: %s" % full_url)
 		print("[BlsquiSDK] Nonce: %s" % current_nonce)
 
-	# 2. Launch system browser (equivalent to web SDK tab launch)
+	# Launch system browser (equivalent to web SDK tab launch)
 	var launch_err: Error = OS.shell_open(full_url)
 	if launch_err != OK:
 		push_error("[BlsquiSDK] Failed to launch system browser.")
@@ -75,7 +75,7 @@ static func request_transaction(options: Dictionary = {}) -> Dictionary:
 			"error": "Failed to launch system browser"
 		}
 
-	# 3. Poll backend server for transaction status
+	# Poll backend server for transaction status
 	return await _poll_transaction_status(is_testnet, current_nonce, verbose)
 
 
