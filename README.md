@@ -71,6 +71,7 @@ Returned asynchronously by `await BlsquiSDK.request_transaction(...)`:
     "to": String,            # Recipient account address (extracted from TokensDeposited)
     "amount": String,        # Executed payment amount (Cadence UFix64 string)
     "token": String,         # Token identifier (e.g., "FlowToken")
+    "txFee": String,         # Gas/execution fee deducted on-chain (String or null)
     "error": String,         # Client-side error or failure description
     "errorMessage": Variant  # Detailed Cadence runtime error message from the node, or null
 }
@@ -86,7 +87,7 @@ Returned asynchronously by `await BlsquiSDK.request_transaction(...)`:
 
  - `TIMEOUT`: Polling exceeded the maximum duration (default: 300 seconds).
 
- - `CANCELED`: Polling was stopped manually via BlsquiSDK.cancel_transaction().
+ - `CANCELED`: Polling was stopped manually via `BlsquiSDK.cancel_transaction()`.
 
 
 ## Requirements
