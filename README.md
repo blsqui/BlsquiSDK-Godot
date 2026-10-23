@@ -99,7 +99,7 @@ func _on_scout_opponent_pressed(opponent_address: String) -> void:
     var slots: Array = await BlsquiSDK.get_stage_slots({
         "target_address": opponent_address,
         "publisher_address": "0xYourPublisherAddress",
-        "app_id": "com.yourstudio.game",
+        "app_id": "com_yourstudio_game",
         "is_testnet": true,
         "verbose": true
     })
