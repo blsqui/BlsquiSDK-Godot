@@ -250,13 +250,6 @@ static func get_stage_slots(options: Dictionary) -> Array:
 
 static var current_user: BlsquiCurrentUser = null
 
-static func init_sdk(app_id: String, publisher_address: String, network: String = "testnet") -> void:
-	if not current_user:
-		current_user = BlsquiCurrentUser.new()
-		var main_tree: SceneTree = Engine.get_main_loop() as SceneTree
-		main_tree.root.add_child(current_user)
-	current_user.configure(app_id, publisher_address, network)
-
 static func open_dashboard(app_id: String = "", publisher_address: String = "", network: String = "testnet") -> void:
 	if not current_user:
 		var main_tree: SceneTree = Engine.get_main_loop() as SceneTree
@@ -265,3 +258,6 @@ static func open_dashboard(app_id: String = "", publisher_address: String = "", 
 		current_user.configure(app_id, publisher_address, network)
 	
 	current_user.open_dashboard()
+
+static func summon_dashboard(app_id: String = "", publisher_address: String = "", network: String = "testnet") -> void:
+	open_dashboard(app_id, publisher_address, network)
