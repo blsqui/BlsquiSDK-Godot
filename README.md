@@ -90,6 +90,24 @@ Returned asynchronously by `await BlsquiSDK.request_transaction(...)`:
  - `CANCELED`: Polling was stopped manually via `BlsquiSDK.cancel_transaction()`.
 
 
+### Querying Stage Slots (Cadence Access Node)
+
+Query equipped in-game stage slots for any player on-demand directly from Flow Access Nodes. This executes purely via Cadence scripts over HTTP with zero WebRTC, no local wallet sign-in, and zero memory overhead.
+
+```gdscript
+func _on_scout_opponent_pressed(opponent_address: String) -> void:
+    var slots: Array = await BlsquiSDK.get_stage_slots({
+        "target_address": opponent_address,
+        "publisher_address": "0xYourPublisherAddress",
+        "app_id": "com.yourstudio.game",
+        "is_testnet": true,
+        "verbose": true
+    })
+
+    for slot: Dictionary in slots:
+        print("Slot #%d -> Item ID: %s" % [slot["slotIndex"], slot["itemId"]])
+```
+
 ## Requirements
 - Godot Engine **4.x** (Standard or .NET)
 - Active internet connection

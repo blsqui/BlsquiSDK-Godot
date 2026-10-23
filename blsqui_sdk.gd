@@ -243,3 +243,7 @@ static func generate_client_nonce() -> String:
 	var crypto: Crypto = Crypto.new()
 	var random_bytes: PackedByteArray = crypto.generate_random_bytes(32)
 	return random_bytes.hex_encode().sha256_text()
+
+## Queries a user's equipped stage slots directly from Flow Access Nodes.
+static func get_stage_slots(options: Dictionary) -> Array:
+	return await BlsquiStageSlot.get_stage_slots(options)
