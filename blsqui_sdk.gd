@@ -259,5 +259,7 @@ static func open_dashboard(app_id: String = "", publisher_address: String = "", 
 	
 	current_user.open_dashboard()
 
-static func summon_dashboard(app_id: String = "", publisher_address: String = "", network: String = "testnet") -> void:
+static func summon_dashboard(app_id: String = "", publisher_address: String = "", network: String = "testnet", on_update: Callable = Callable()) -> void:
 	open_dashboard(app_id, publisher_address, network)
+	if on_update.is_valid() and not current_user.user_updated.is_connected(on_update):
+		current_user.user_updated.connect(on_update)
