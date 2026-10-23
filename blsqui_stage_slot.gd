@@ -86,15 +86,34 @@ static func get_stage_slots(options: Dictionary) -> Array:
 		return []
 
 	var cadence_res: Variant = json.get_data()
+
+	# If the response itself is a base64-encoded string (or stringified JSON)
+	if cadence_res is String:
+		var raw_str: String = (cadence_res as String).strip_edges()
+		# Try parsing directly in case it is double-stringified JSON
+		if json.parse(raw_str) == OK:
+			cadence_res = json.get_data()
+		else:
+			# Base64 decode to UTF-8 text and parse as JSON
+			var decoded_bytes: PackedByteArray = Marshalls.base64_to_raw(raw_str)
+			var decoded_text: String = decoded_bytes.get_string_from_utf8()
+			if json.parse(decoded_text) == OK:
+				cadence_res = json.get_data()
+
+	if verbose:
+		print("[BlsquiSDK] Decoded Cadence Object: ", cadence_res)
+
 	var raw_array: Array = []
 
-	# Handle Cadence Optional Array: { "type": "Optional", "value": { "type": "Array", "value": [...] } }
+	# Traverse: Optional -> Array -> elements
 	if cadence_res is Dictionary and cadence_res.has("value"):
-		var val_node: Variant = cadence_res.get("value")
-		if val_node is Dictionary and val_node.has("value") and val_node["value"] is Array:
-			raw_array = val_node["value"]
-		elif val_node is Array:
-			raw_array = val_node
+		var inner_node: Variant = cadence_res.get("value")
+		if inner_node is Dictionary and inner_node.has("value"):
+			var array_node: Variant = inner_node.get("value")
+			if array_node is Array:
+				raw_array = array_node
+		elif inner_node is Array:
+			raw_array = inner_node
 
 	var slots: Array = []
 	for idx: int in range(raw_array.size()):
