@@ -89,7 +89,6 @@ func init_presence(player_address: String, role: String = "game") -> void:
 	}
 	pc.initialize(ice_config)
 
-	# In Godot WebRTC, create the DataChannel BEFORE creating the offer
 	dc = pc.create_data_channel("blsqui-presence", { "negotiated": false })
 
 	# Create local SDP offer (will trigger session_description_created signal)
@@ -173,12 +172,18 @@ func _on_ice_candidate_created(media: String, index: int, name: String) -> void:
 
 
 func send_data(data: Variant) -> void:
-	if dc and dc.get_ready_state() == WebRTCDataChannel.STATE_OPEN:
-		var payload: String = data if data is String else JSON.stringify(data)
-		dc.put_packet(payload.to_utf8_buffer())
+	if dc:
+		var state: int = dc.get_ready_state()
+		if state == WebRTCDataChannel.STATE_OPEN:
+			var payload: String = data if data is String else JSON.stringify(data)
+			print("📤 [Godot WebRTC SEND]: ", payload)
+			var err = dc.put_packet(payload.to_utf8_buffer())
+			if err != OK:
+				push_error("[WebRTC] put_packet error code: %d" % err)
+		else:
+			push_warning("[WebRTC] Send dropped: DataChannel ready state is %d (expected 1/OPEN)" % state)
 	else:
-		push_warning("[WebRTC] Send failed: DataChannel not open")
-
+		push_warning("[WebRTC] Send failed: dc is null")
 
 func _handle_incoming_message(msg: Dictionary) -> void:
 	var msg_type: String = msg.get("type", "")

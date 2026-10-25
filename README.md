@@ -18,6 +18,7 @@ The official Godot Engine SDK for **Blsqui** — enabling seamless Flow blockcha
 ## Quick Start Example
 Call `BlsquiSDK.request_transaction()` from any button or event handler:
 
+See the complete sample in [`examples/car_movement.gd`](./examples/car_movement.gd).
 ```gdscript
 extends Button
 
@@ -94,6 +95,7 @@ Returned asynchronously by `await BlsquiSDK.request_transaction(...)`:
 
 Query equipped in-game stage slots for any player on-demand directly from Flow Access Nodes. This executes purely via Cadence scripts over HTTP with zero WebRTC, no local wallet sign-in, and zero memory overhead.
 
+See the complete sample in [`examples/scout_button.gd`](./examples/scout_button.gd).
 ```gdscript
 func _on_scout_opponent_pressed(opponent_address: String) -> void:
     var slots: Array = await BlsquiSDK.get_stage_slots({
@@ -108,10 +110,11 @@ func _on_scout_opponent_pressed(opponent_address: String) -> void:
         print("Slot #%d -> Item ID: %s" % [slot["slotIndex"], slot["itemId"]])
 ```
 
-## How to Access to the Dashboard
+## How to Access the Dashboard
 
 Launching the dashboard establishes a direct WebRTC DataChannel connection with the wallet interface via Pion Hub. By passing a callback to summon_dashboard(), your game subscribes to real-time wallet events without polling—automatically receiving updates whenever the player logs in, modifies equipped stage slots, or completes on-chain item actions.
 
+See the complete sample in [`examples/dashboard_button.gd`](./examples/dashboard_button.gd).
 ```
 extends CharacterBody2D
 
@@ -123,51 +126,113 @@ func _input_event(_viewport: Viewport, event: InputEvent, _shape_idx: int) -> vo
 		_on_hub_button_pressed()
 
 func _on_hub_button_pressed() -> void:
-	print("[Dashboard] OPEN")
 	BlsquiSDK.summon_dashboard("valkyrie-vanguard", "0x2f13c512df0b0ad7", "testnet", _on_blsqui_user_updated)
 
 func _on_blsqui_user_updated(state: Dictionary) -> void:
-	print("\n🎮 [Game Sync] User state received from Dashboard!")
-	
+	if not sync_status_label:
+		return
+
+	# Handle interim connection status text
+	if state.has("status_text"):
+		sync_status_label.text = "⚡ %s" % state["status_text"]
+		return
+
 	var is_logged_in: bool = bool(state.get("loggedIn", false))
 	var player_addr: String = str(state.get("addr", ""))
 	var user_name: String = str(state.get("userName", ""))
-	var avatar_url: String = str(state.get("avatarImage", ""))
 	var slots: Array = state.get("slot", [])
+	var time_str: String = Time.get_time_string_from_system()
 
-	print("Status:   ", "LOGGED IN" if is_logged_in else "GUEST / LOGGED OUT")
-	print("Address:  ", player_addr)
-	print("Username: ", user_name if user_name != "" else "(No display name)")
-	print("Avatar:   ", avatar_url)
-	print("Equipped items count: ", slots.size())
+	var hud_text: String = "⚡ [WebRTC SYNC - %s]\n" % time_str
+	hud_text += "• Status: %s" % ("LOGGED IN" if is_logged_in else "GUEST / OFFLINE")
+	
+	if is_logged_in:
+		var short_addr: String = player_addr.left(6) + "..." + player_addr.right(4) if player_addr.length() > 10 else player_addr
+		hud_text += " | %s (%s)\n" % [user_name if user_name != "" else "Anon", short_addr]
+	else:
+		hud_text += "\n"
 
-	# Inspect equipped stage slots (weapons, shields, abilities)
+	var active_item_count: int = 0
 	for slot: Dictionary in slots:
-		var slot_idx: int = int(slot.get("slotIndex", 0))
+		var idx: int = int(slot.get("slotIndex", 0))
 		var item_id: String = str(slot.get("itemId", ""))
 		var item_name: String = str(slot.get("itemName", ""))
-		var remaining_charges: int = int(slot.get("remainingCharges", 0))
-		var max_charges: int = int(slot.get("maxCharges", 0))
+		
+		# Fallback to 3 if null or 0
+		var remaining_charges: int = int(slot.get("remainingCharges", 3))
+		if remaining_charges <= 0:
+			remaining_charges = 3
+			
+		var max_charges: int = int(slot.get("maxCharges", 3))
+		if max_charges <= 0:
+			max_charges = 3
 
 		if item_id != "":
-			print("  -> [Slot %d] %s (ID: %s) | Durability: %d / %d" % [
-				slot_idx, item_name, item_id, remaining_charges, max_charges
-			])
-		else:
-			print("  -> [Slot %d] Empty" % slot_idx)
+			active_item_count += 1
+			# Formats like: [1] Dragon Piercer (3 / 5)
+			hud_text += "  [%d] %s (%d / %d)\n" % [idx, item_name, remaining_charges, max_charges]
 
-	# Handle when an item's on-chain durability was just consumed
+	if active_item_count == 0:
+		hud_text += "  (No items equipped)\n"
+
+	# Check for last item use action and highlight prominently
 	var last_used: Variant = state.get("lastUsedItem", null)
 	if last_used is Dictionary and not last_used.is_empty():
-		print("⚡ Recent Item Action -> ID: %s | TX: %s" % [
-			last_used.get("itemId", ""),
-			last_used.get("txId", "")
-		])
+		var used_id: String = str(last_used.get("itemId", ""))
+		var tx_hash: String = str(last_used.get("txId", "")).left(8)
+		hud_text += "🔥 ITEM USED 🔥: %s (TX: %s...)\n" % [used_id, tx_hash]
+		_flash_action_feedback()
+
+	sync_status_label.text = hud_text.strip_edges(false, true)
+```
+
+## Triggering In-Game Item Actions (WebRTC)
+
+Trigger on-chain item actions directly from your gameplay runtime via real-time WebRTC DataChannels. The game client checks if the target item is actively equipped in the user's stage slots and dispatches an instant trigger signal to the wallet dashboard.
+
+See the complete sample in [`examples/def_button.gd`](./examples/def_button.gd).
+```gdscript
+func _on_item_trigger_button_pressed() -> void:
+	print("[Item Trigger Action Button] Pressed")
+
+	if not BlsquiSDK.current_user:
+		print("[Item Trigger Action Button] No active session. Open dashboard first.")
+		return
+
+	var slots: Array = BlsquiSDK.current_user.user_state.get("slot", [])
+	var target_item_id: String = ""
+
+	# Check if the item is currently equipped in any slot
+	for slot: Dictionary in slots:
+		var item_id: String = str(slot.get("itemId", ""))
+		if item_id == TRIGGER_ITEM_ID:
+			target_item_id = item_id
+			break
+
+	if target_item_id == "":
+		print("[Item Trigger Action Button] Item is not equipped! Cannot trigger Item Trigger action.")
+		return
+
+	print("[Item Trigger Action Button] Activating item: ", target_item_id)
+	BlsquiSDK.trigger_item_action(target_item_id)
 ```
 
 ## Requirements
 - Godot Engine **4.x** (Standard or .NET)
 - Active internet connection
+
+## Prerequisites: WebRTC GDExtension
+Before using WebRTC presence features on desktop platforms (macOS, Windows, Linux), you must install the official WebRTC GDExtension plugin:
+
+1. Open Godot and navigate to the AssetLib tab at the top.
+
+2. Search for WebRTC plugin (by Fabio Alessandrelli / faless).
+
+3. Download and install it into your project root.
+
+4. Restart the Godot editor (Project -> Reload Current Project).
+
+(Alternatively, grab godot-extension-webrtc_native.zip from godotengine/webrtc-native Releases and place it under addons/webrtc or project root).
 
 ## License
 MIT License - see [LICENSE](LICENSE) for details.

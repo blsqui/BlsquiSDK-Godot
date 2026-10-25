@@ -263,3 +263,9 @@ static func summon_dashboard(app_id: String = "", publisher_address: String = ""
 	open_dashboard(app_id, publisher_address, network)
 	if on_update.is_valid() and not current_user.user_updated.is_connected(on_update):
 		current_user.user_updated.connect(on_update)
+
+static func trigger_item_action(item_id: String) -> void:
+	if current_user:
+		current_user.trigger_item_action(item_id)
+	else:
+		push_warning("[BlsquiSDK] current_user is null. Call summon_dashboard first.")

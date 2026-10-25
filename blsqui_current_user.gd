@@ -141,3 +141,23 @@ func _on_presence_message(msg: Dictionary) -> void:
 				"txId": msg.get("txId", "")
 			}
 		})
+
+## Sends an item action trigger to the active WebRTC dashboard session
+func trigger_item_action(item_id: String) -> void:
+	if item_id == "":
+		push_warning("[BlsquiSDK] trigger_item_action called with empty itemId")
+		return
+
+	if not presence or not presence.get_state().get("connected", false):
+		push_warning("[BlsquiSDK] WebRTC connection not active. Cannot trigger item action.")
+		return
+
+	var packet: Dictionary = {
+		"type": "TRIGGER_ITEM_ACTION",
+		"itemId": item_id,
+		"player": str(user_state["addr"]).to_lower(),
+		"timestamp": int(Time.get_unix_time_from_system() * 1000)
+	}
+
+	print("[BlsquiSDK] Triggering item action for: ", item_id)
+	presence.send_data(packet)
