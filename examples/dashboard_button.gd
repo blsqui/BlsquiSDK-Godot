@@ -11,13 +11,13 @@ func _setup_hud_style() -> void:
 	if not sync_status_label:
 		return
 	
-	# 1. Label configuration
+	# Label configuration
 	sync_status_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	sync_status_label.add_theme_color_override("font_color", Color.WHITE)
 	sync_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	sync_status_label.text = "⚡ [WebRTC Idle] Click HUB to Connect"
 
-	# 2. Parent panel styling
+	# panel styling
 	var parent_panel = sync_status_label.get_parent() as Control
 	if parent_panel:
 		var style: StyleBoxFlat = StyleBoxFlat.new()
