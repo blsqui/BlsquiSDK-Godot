@@ -18,9 +18,6 @@ var dc: WebRTCDataChannel = null
 var active_address: String = ""
 var is_connecting: bool = false
 
-var _pending_offer_sdp: String = ""
-var _pending_offer_type: String = ""
-
 func _ready() -> void:
 	set_process(true)
 
@@ -35,6 +32,8 @@ func _process(_delta: float) -> void:
 		if channel_state == WebRTCDataChannel.STATE_OPEN and not _state["connected"]:
 			print("✅ [Godot WebRTC DataChannel OPEN]")
 			_update_state({"connected": true})
+			# Immediately request state sync from dashboard on channel open
+			ping_dashboard()
 		elif channel_state == WebRTCDataChannel.STATE_CLOSED and _state["connected"]:
 			print("🛑 [Godot WebRTC DataChannel CLOSED]")
 			_update_state({
@@ -61,6 +60,31 @@ func _update_state(partial: Dictionary) -> void:
 		_state[key] = partial[key]
 	state_changed.emit(_state.duplicate())
 
+## Sends a PRESENCE_PING over the DataChannel to request state sync from dashboard
+func ping_dashboard() -> void:
+	if dc == null or dc.get_ready_state() != WebRTCDataChannel.STATE_OPEN:
+		push_warning("[Blsqui WebRTC] Cannot ping: DataChannel is not open.")
+		return
+
+	var now_ms: int = int(Time.get_unix_time_from_system() * 1000)
+	var ping_payload: Dictionary = {
+		"type": "PRESENCE_PING",
+		"role": "game",
+		"player": active_address.to_lower(),
+		"timestamp": now_ms
+	}
+	send_data(ping_payload)
+
+## Checks connection status and re-establishes if disconnected
+func verify_or_reconnect(player_address: String) -> void:
+	if dc != null and dc.get_ready_state() == WebRTCDataChannel.STATE_OPEN and _state["connected"]:
+		# Channel is alive: send ping immediately to force dashboard to push slots
+		ping_dashboard()
+	else:
+		# Connection dropped or never completed: re-initiate signaling
+		print("[Blsqui WebRTC] Connection inactive on Hub open. Re-initializing...")
+		init_presence(player_address, "game")
+
 ## Starts the WebRTC handshake with Pion Hub via HTTP SDP exchange
 func init_presence(player_address: String, role: String = "game") -> void:
 	var clean_addr: String = player_address.to_lower().strip_edges()
@@ -74,9 +98,11 @@ func init_presence(player_address: String, role: String = "game") -> void:
 	is_connecting = true
 	active_address = clean_addr
 	cleanup()
+	is_connecting = true
+	active_address = clean_addr
 
 	pc = WebRTCPeerConnection.new()
-	
+
 	# Connect Godot's WebRTC signaling callbacks
 	pc.session_description_created.connect(_on_session_description_created.bind(role, clean_addr))
 	pc.ice_candidate_created.connect(_on_ice_candidate_created)
@@ -97,18 +123,17 @@ func init_presence(player_address: String, role: String = "game") -> void:
 		push_error("[WebRTC] Failed to create offer: %d" % err)
 		is_connecting = false
 
-
 func _on_session_description_created(type: String, sdp: String, role: String, clean_addr: String) -> void:
 	if not pc:
 		return
 
-	# 1. Set local description on our peer connection
+	# Set local description on our peer connection
 	pc.set_local_description(type, sdp)
 
-	# 2. Wait a brief moment for ICE candidates to append to the SDP (or gather complete)
+	# Wait a brief moment for ICE candidates to append to the SDP
 	await get_tree().create_timer(0.3).timeout
 
-	# 3. Post full offer to Pion Hub
+	# Post full offer to Pion Hub
 	var payload: Dictionary = {
 		"role": role,
 		"player": clean_addr,
@@ -149,8 +174,7 @@ func _on_session_description_created(type: String, sdp: String, role: String, cl
 	if json.parse(body_text) == OK and json.get_data() is Dictionary:
 		var answer: Dictionary = json.get_data()
 		var answer_sdp: String = ""
-		
-		# Hub may return either {"sdp": "..."} or {"sdp": {"sdp": "...", "type": "answer"}}
+
 		if answer.has("sdp"):
 			if answer["sdp"] is Dictionary:
 				answer_sdp = str(answer["sdp"].get("sdp", ""))
@@ -165,11 +189,8 @@ func _on_session_description_created(type: String, sdp: String, role: String, cl
 
 	is_connecting = false
 
-
-func _on_ice_candidate_created(media: String, index: int, name: String) -> void:
-	# Godot 4 WebRTC gathers candidates directly into the session description when polled
+func _on_ice_candidate_created(_media: String, _index: int, _name: String) -> void:
 	pass
-
 
 func send_data(data: Variant) -> void:
 	if dc:
@@ -177,7 +198,7 @@ func send_data(data: Variant) -> void:
 		if state == WebRTCDataChannel.STATE_OPEN:
 			var payload: String = data if data is String else JSON.stringify(data)
 			print("📤 [Godot WebRTC SEND]: ", payload)
-			var err = dc.put_packet(payload.to_utf8_buffer())
+			var err: Error = dc.put_packet(payload.to_utf8_buffer())
 			if err != OK:
 				push_error("[WebRTC] put_packet error code: %d" % err)
 		else:
@@ -195,15 +216,28 @@ func _handle_incoming_message(msg: Dictionary) -> void:
 		})
 
 	if msg_type == "ITEM_USE_REQUESTED":
-		var item_id: String = msg.get("itemId", "")
-		var serial_number: int = int(msg.get("serialNumber", 0))
-		var flix_id: String = msg.get("flixId", "")
-		var is_testnet: bool = msg.get("isTestnet", true)
+		var default_pub: String = BlsquiSDK.current_user.publisher_address if BlsquiSDK.current_user else ""
+		var default_app: String = BlsquiSDK.current_user.app_id if BlsquiSDK.current_user else ""
+
+		var req_publisher: String = str(msg.get("publisherAddress", msg.get("publisher_address", ""))).strip_edges()
+		if req_publisher == "":
+			req_publisher = default_pub
+
+		var req_app_id: String = str(msg.get("appId", msg.get("app_id", ""))).strip_edges()
+		if req_app_id == "":
+			req_app_id = default_app
+
+		var item_id: String = str(msg.get("itemId", msg.get("item_id", "")))
+		var serial_number: int = int(msg.get("serialNumber", msg.get("serial_number", 0)))
+		var flix_id: String = str(msg.get("flixId", msg.get("flix_id", "")))
+		var is_testnet: bool = bool(msg.get("isTestnet", true))
 
 		var tx_res: Dictionary = await BlsquiSDK.request_transaction({
 			"is_testnet": is_testnet,
 			"flix_id": flix_id,
 			"args": {
+				"publisherAddress": req_publisher,
+				"appId": req_app_id,
 				"itemId": item_id,
 				"serialNumber": serial_number
 			}
@@ -217,7 +251,7 @@ func _handle_incoming_message(msg: Dictionary) -> void:
 				"txId": tx_res.get("txId", ""),
 				"timestamp": int(Time.get_unix_time_from_system() * 1000)
 			})
-			
+
 			message_received.emit({
 				"type": "ITEM_USE_COMPLETED",
 				"itemId": item_id,
@@ -226,7 +260,6 @@ func _handle_incoming_message(msg: Dictionary) -> void:
 			})
 
 	message_received.emit(msg)
-
 
 func cleanup() -> void:
 	if dc:

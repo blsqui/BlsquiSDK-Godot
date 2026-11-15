@@ -2,6 +2,8 @@ class_name BlsquiCurrentUser
 extends Node
 
 signal user_updated(user_state: Dictionary)
+signal slots_updated(slots: Array)
+signal item_use_requested(payload: Dictionary)
 
 const TESTNET_BASE_URL: String = "https://lab.blsqui.net"
 const MAINNET_BASE_URL: String = "https://wallet.blsqui.net"
@@ -50,13 +52,13 @@ func get_or_create_channel_key() -> String:
 		session_channel_key = generate_channel_key()
 	return session_channel_key
 
-## Opens system browser pointing to the Web Wallet Dashboard and connects game presence
+## Opens system browser pointing to the Web Wallet Dashboard and connects/syncs game presence
 func open_dashboard() -> void:
 	var base_url: String = TESTNET_BASE_URL if network == "testnet" else MAINNET_BASE_URL
 	var channel_key: String = get_or_create_channel_key()
 
-	# Connect Godot WebRTC presence using channel_key as the room ID
-	presence.init_presence(channel_key, "game")
+	# Verify active DataChannel or initiate WebRTC presence using channel_key as the room ID
+	presence.verify_or_reconnect(channel_key)
 
 	# Build URL parameters
 	var params: Array = [
@@ -90,6 +92,9 @@ func set_state(updates: Dictionary) -> void:
 
 	user_updated.emit(user_state.duplicate())
 
+	if updates.has("slot") and updates["slot"] is Array:
+		slots_updated.emit(updates["slot"].duplicate())
+
 func _send_presence_live_signal() -> void:
 	presence.send_data({
 		"type": "PRESENCE_PONG",
@@ -104,6 +109,11 @@ func _on_presence_message(msg: Dictionary) -> void:
 	var msg_type: String = msg.get("type", "")
 
 	if msg_type == "PRESENCE_PING":
+		# Adopt player address from dashboard ping if local address is empty
+		if str(user_state["addr"]).strip_edges() == "":
+			var ping_player: String = str(msg.get("player", "")).strip_edges()
+			if ping_player != "":
+				user_state["addr"] = ping_player
 		_send_presence_live_signal()
 		return
 
@@ -131,6 +141,36 @@ func _on_presence_message(msg: Dictionary) -> void:
 			"avatarImage": "",
 			"userName": ""
 		})
+		return
+
+	if msg_type == "ITEM_USE_REQUESTED":
+		var req_publisher: String = str(msg.get("publisherAddress", msg.get("publisher_address", ""))).strip_edges()
+		if req_publisher == "":
+			req_publisher = publisher_address
+
+		var req_app_id: String = str(msg.get("appId", msg.get("app_id", ""))).strip_edges()
+		if req_app_id == "":
+			req_app_id = app_id
+
+		var payload: Dictionary = {
+			"type": "ITEM_USE_REQUESTED",
+			"player": str(msg.get("player", user_state["addr"])),
+			"publisherAddress": req_publisher,
+			"appId": req_app_id,
+			"app_id": req_app_id,
+			"itemId": str(msg.get("itemId", msg.get("item_id", ""))),
+			"serialNumber": int(msg.get("serialNumber", msg.get("serial_number", 0))),
+			"flixId": str(msg.get("flixId", msg.get("flix_id", ""))),
+			"isTestnet": bool(msg.get("isTestnet", network == "testnet"))
+		}
+		print("[BlsquiSDK] Dispatching item_use_requested -> Publisher: %s, App: %s, Item: %s, Serial: %d, FLIX: %s" % [
+			payload["publisherAddress"],
+			payload["appId"],
+			payload["itemId"],
+			payload["serialNumber"],
+			payload["flixId"]
+		])
+		item_use_requested.emit(payload)
 		return
 
 	if msg_type == "ITEM_USE_COMPLETED":

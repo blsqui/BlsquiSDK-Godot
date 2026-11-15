@@ -1,6 +1,8 @@
 class_name BlsquiSDK
 extends Node
 
+const SDK_VERSION: String = "2.0.1"
+
 # --- Gateway, Session Sign & Polling Endpoints ---
 const MAINNET_GATEWAY_URL: String = "https://wallet.blsqui.net/transaction"
 const TESTNET_GATEWAY_URL: String = "https://lab.blsqui.net/transaction"
@@ -255,6 +257,7 @@ static func open_dashboard(app_id: String = "", publisher_address: String = "", 
 		var main_tree: SceneTree = Engine.get_main_loop() as SceneTree
 		current_user = BlsquiCurrentUser.new()
 		main_tree.root.add_child(current_user)
+	if app_id != "" or publisher_address != "":
 		current_user.configure(app_id, publisher_address, network)
 	
 	current_user.open_dashboard()
