@@ -17,7 +17,7 @@ func _setup_hud_style() -> void:
 	sync_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	sync_status_label.text = "⚡ [WebRTC Idle] Click HUB to Connect"
 
-	# panel styling
+	# Panel styling
 	var parent_panel = sync_status_label.get_parent() as Control
 	if parent_panel:
 		var style: StyleBoxFlat = StyleBoxFlat.new()
@@ -39,7 +39,7 @@ func _input_event(_viewport: Viewport, event: InputEvent, _shape_idx: int) -> vo
 
 func _on_hub_button_pressed() -> void:
 	print("[Dashboard] OPEN")
-	BlsquiSDK.summon_dashboard("valkyrie-vanguard", "0x2f13c512df0b0ad7", "testnet", _on_blsqui_user_updated)
+	BlsquiSDK.summon_dashboard("valkyrie_vanguard", "0x2f13c512df0b0ad7", "testnet", _on_blsqui_user_updated)
 
 func _flash_action_feedback() -> void:
 	if not sync_status_label:

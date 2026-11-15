@@ -1,6 +1,6 @@
 extends CharacterBody2D
 
-const SHIELD_ITEM_ID: String = "shd_valkyrie_aegis_2"
+const SHIELD_ITEM_ID: String = "shd_valkyrie_aegis_b"
 
 func _ready() -> void:
 	input_pickable = true
